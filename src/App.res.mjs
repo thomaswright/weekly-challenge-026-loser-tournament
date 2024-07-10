@@ -5,6 +5,12 @@ import * as Caml_option from "rescript/lib/es6/caml_option.js";
 import * as Core__Array from "@rescript/core/src/Core__Array.res.mjs";
 import * as JsxRuntime from "react/jsx-runtime";
 
+function arrayRange(n) {
+  return Core__Array.make(n, 0).map(function (param, i) {
+              return i;
+            });
+}
+
 function groupPairs(a) {
   return Core__Array.reduce(a, [
                 [],
@@ -32,22 +38,8 @@ function groupPairs(a) {
                 }))[0];
 }
 
-function boundGaussian() {
-  while(true) {
-    var u = 1 - Math.random();
-    var v = Math.random();
-    var z = Math.sqrt(-2.0 * Math.log(u)) * Math.cos(2.0 * 3.14159265 * v);
-    var scaled = z / 10.0 + 0.5;
-    if (!(scaled < 0 || scaled > 1)) {
-      return scaled;
-    }
-    _param = undefined;
-    continue ;
-  };
-}
-
 function isWin(p1, p2) {
-  return Math.random() > p1 / (p1 + p2);
+  return Math.random() < p1 / (p1 + p2);
 }
 
 function getPlacement(d) {
@@ -75,8 +67,8 @@ function getPlacement(d) {
 }
 
 function getPlayers(num) {
-  return Core__Array.make(num, 0).map(function (param) {
-                  return boundGaussian();
+  return arrayRange(num).map(function (i) {
+                  return Math.pow(1 + (i + 1 | 0) / num, 5);
                 }).toSorted(function (a, b) {
                 return b - a;
               }).map(function (v, i) {
@@ -109,40 +101,105 @@ function runRound(round) {
         ];
 }
 
-function runRounds(_winners, _losers) {
-  while(true) {
-    var losers = _losers;
-    var winners = _winners;
-    var match = runRound(winners);
-    var newLosers = match[1];
-    var newWinners = match[0];
-    if (newWinners.length < 2) {
-      return [
-              newWinners,
-              Belt_Array.concatMany([
-                    losers,
-                    [newLosers]
-                  ])
-            ];
-    }
-    _losers = Belt_Array.concatMany([
-          losers,
-          [newLosers]
-        ]);
-    _winners = newWinners;
-    continue ;
+function runRounds(round1) {
+  var recF = function (_winners, _losers) {
+    while(true) {
+      var losers = _losers;
+      var winners = _winners;
+      var match = runRound(winners);
+      var newLosers = match[1];
+      var newWinners = match[0];
+      if (newWinners.length < 2) {
+        return [
+                newWinners,
+                losers.concat(newLosers)
+              ];
+      }
+      _losers = losers.concat(newLosers);
+      _winners = newWinners;
+      continue ;
+    };
   };
+  var match = recF(round1, []);
+  var winner = match[0][0];
+  return [
+          winner,
+          match[1]
+        ];
+}
+
+function runRoundsWithLosers(round1) {
+  var recF = function (_playing, _sittingOut, _comebackRound) {
+    while(true) {
+      var comebackRound = _comebackRound;
+      var sittingOut = _sittingOut;
+      var playing = _playing;
+      var match = runRound(playing);
+      var newLosers = match[1];
+      var newWinners = match[0];
+      if (newWinners.length < 2) {
+        return [
+                newWinners,
+                sittingOut.concat(newLosers)
+              ];
+      }
+      if (comebackRound) {
+        _comebackRound = !comebackRound;
+        _sittingOut = sittingOut.concat(newLosers);
+        _playing = newWinners;
+        continue ;
+      }
+      var shuffled = Core__Array.toShuffled(sittingOut);
+      var luckyFew = shuffled.slice(0, newWinners.length);
+      var stillOut = shuffled.slice(newWinners.length);
+      _comebackRound = !comebackRound;
+      _sittingOut = stillOut.concat(newLosers);
+      _playing = newWinners.concat(luckyFew);
+      continue ;
+    };
+  };
+  var match = recF(round1, [], false);
+  var winner = match[0][0];
+  return [
+          winner,
+          match[1]
+        ];
 }
 
 function runTournament() {
   var num = Math.pow(2, 4) | 0;
-  var players = getPlayers(num);
   var placement = getPlacement(4);
-  var round1 = placement.map(function (p) {
-        return players[p];
-      });
-  var match = runRounds(round1, []);
-  console.log(match[0], match[1]);
+  var winsRegular = Core__Array.reduce(arrayRange(1000), Core__Array.make(num, 0), (function (acc, cur) {
+          var players = getPlayers(num);
+          var round1 = placement.map(function (p) {
+                return players[p];
+              });
+          var match = runRounds(round1);
+          var winner = match[0];
+          return acc.map(function (v, i) {
+                      if (winner.id === i) {
+                        return v + 1 | 0;
+                      } else {
+                        return v;
+                      }
+                    });
+        }));
+  var winsLosers = Core__Array.reduce(arrayRange(1000), Core__Array.make(num, 0), (function (acc, cur) {
+          var players = getPlayers(num);
+          var round1 = placement.map(function (p) {
+                return players[p];
+              });
+          var match = runRoundsWithLosers(round1);
+          var winner = match[0];
+          return acc.map(function (v, i) {
+                      if (winner.id === i) {
+                        return v + 1 | 0;
+                      } else {
+                        return v;
+                      }
+                    });
+        }));
+  console.log(winsRegular, winsLosers);
 }
 
 runTournament();

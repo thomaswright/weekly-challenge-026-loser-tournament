@@ -1,3 +1,8 @@
+let arrayRange = n => {
+  let a = Array.make(~length=n, 0)->Array.mapWithIndex((_, i) => i)
+  a
+}
+
 let groupNum = (a, n) => {
   a->Array.reduce(([], []), ((arr, col), cur) => {
     col->Array.length < n - 1 ? (arr, [...col, cur]) : (Array.concat(arr, [...col, cur]), [])
@@ -33,7 +38,7 @@ let rec boundGaussian = () => {
 }
 
 let isWin = (p1, p2) => {
-  Math.random() > p1 /. (p1 +. p2)
+  Math.random() < p1 /. (p1 +. p2)
 }
 
 let getPlacement = d => {
@@ -52,6 +57,8 @@ let getPlacement = d => {
   recF([0], d - 1)
 }
 
+let skillByIndex = (i, num) => (1. +. (i + 1)->Int.toFloat /. num->Int.toFloat) ** 5.
+
 // type gameRecord = {
 //   p1: int,
 //   p2: int,
@@ -66,8 +73,8 @@ type player = {
 }
 
 let getPlayers = num => {
-  Array.make(~length=num, 0)
-  ->Array.map(_ => boundGaussian())
+  arrayRange(num)
+  ->Array.map(i => skillByIndex(i, num))
   ->Array.toSorted((a, b) => {
     b -. a
   })
@@ -86,24 +93,68 @@ let runRound = round => {
   (winners, losers)
 }
 
-let rec runRounds = (winners, losers) => {
-  let (newWinners, newLosers) = winners->runRound
-  newWinners->Array.length < 2
-    ? (newWinners, [...losers, newLosers])
-    : runRounds(newWinners, [...losers, newLosers])
+let runRounds = round1 => {
+  let rec recF = (winners, losers) => {
+    let (newWinners, newLosers) = winners->runRound
+    newWinners->Array.length < 2
+      ? (newWinners, Array.concat(losers, newLosers))
+      : recF(newWinners, Array.concat(losers, newLosers))
+  }
+
+  let (winners, losers) = recF(round1, [])
+  let winner = winners->Array.getUnsafe(0)
+  (winner, losers)
+}
+
+let runRoundsWithLosers = round1 => {
+  let rec recF = (playing, sittingOut, comebackRound) => {
+    let (newWinners, newLosers) = playing->runRound
+
+    // Console.log2(newWinners, newLosers)
+
+    newWinners->Array.length < 2
+      ? (newWinners, Array.concat(sittingOut, newLosers))
+      : !comebackRound
+      ? {
+        let shuffled = sittingOut->Array.toShuffled
+        let luckyFew = shuffled->Array.slice(~start=0, ~end=newWinners->Array.length)
+        let stillOut = shuffled->Array.sliceToEnd(~start=newWinners->Array.length)
+        recF(Array.concat(newWinners, luckyFew), Array.concat(stillOut, newLosers), !comebackRound)
+      }
+      : recF(newWinners, Array.concat(sittingOut, newLosers), !comebackRound)
+  }
+
+  let (winners, losers) = recF(round1, [], false)
+  let winner = winners->Array.getUnsafe(0)
+  (winner, losers)
 }
 
 let runTournament = () => {
   let level = 4
   let num = (2. ** level->Int.toFloat)->Float.toInt
-  let players = getPlayers(num)
   let placement = getPlacement(level)
 
-  let round1 = placement->Array.map(p => players->Array.getUnsafe(p))
+  // let players = getPlayers(num)
+  // let placement = getPlacement(level)
+  // let round1 = placement->Array.map(p => players->Array.getUnsafe(p))
 
-  let (winners, losers) = runRounds(round1, [])
+  let winsRegular = arrayRange(1000)->Array.reduce(Array.make(~length=num, 0), (acc, cur) => {
+    let players = getPlayers(num)
+    let round1 = placement->Array.map(p => players->Array.getUnsafe(p))
+    let (winner, losers) = runRounds(round1)
 
-  Console.log2(winners, losers)
+    acc->Array.mapWithIndex((v, i) => winner.id == i ? v + 1 : v)
+  })
+
+  let winsLosers = arrayRange(1000)->Array.reduce(Array.make(~length=num, 0), (acc, cur) => {
+    let players = getPlayers(num)
+    let round1 = placement->Array.map(p => players->Array.getUnsafe(p))
+    let (winner, losers) = runRoundsWithLosers(round1)
+
+    acc->Array.mapWithIndex((v, i) => winner.id == i ? v + 1 : v)
+  })
+
+  Console.log2(winsRegular, winsLosers)
 }
 
 runTournament()
