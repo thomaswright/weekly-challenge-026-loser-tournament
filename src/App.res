@@ -1,3 +1,19 @@
+let groupNum = (a, n) => {
+  a->Array.reduce(([], []), ((arr, col), cur) => {
+    col->Array.length < n - 1 ? (arr, [...col, cur]) : (Array.concat(arr, [...col, cur]), [])
+  })
+}
+
+let groupPairs = a => {
+  let (pairs, _) = a->Array.reduce(([], None), ((arr, col), cur) => {
+    switch col {
+    | None => (arr, Some(cur))
+    | Some(x) => ([...arr, (x, cur)], None)
+    }
+  })
+  pairs
+}
+
 let pi = 3.14159265
 
 let gaussian = (mean, stdev) => {
@@ -20,7 +36,7 @@ let isWin = (p1, p2) => {
   Math.random() > p1 /. (p1 +. p2)
 }
 
-let tournamentConstruction = d => {
+let getPlacement = d => {
   let rec recF = (t, depth) => {
     let level = t->Array.length
     let rank =
@@ -36,14 +52,61 @@ let tournamentConstruction = d => {
   recF([0], d - 1)
 }
 
-let genPlayers = () => {
-  let players = Array.make(~length=64, 0)->Array.map(_ => boundGaussian())
-  Console.log(players)
+// type gameRecord = {
+//   p1: int,
+//   p2: int,
+//   winner: int,
+//   round: int,
+//   gamePosition: int
+// }
+
+type player = {
+  id: int,
+  skill: float,
 }
 
-genPlayers()
+let getPlayers = num => {
+  Array.make(~length=num, 0)
+  ->Array.map(_ => boundGaussian())
+  ->Array.toSorted((a, b) => {
+    b -. a
+  })
+  ->Array.mapWithIndex((v, i) => {id: i, skill: v})
+}
 
-Console.log(tournamentConstruction(2))
+let runRound = round => {
+  let (winners, losers) =
+    round
+    ->groupPairs
+    ->Array.map(((p1, p2)) => {
+      isWin(p1.skill, p2.skill) ? (p1, p2) : (p2, p1)
+    })
+    ->Belt.Array.unzip
+
+  (winners, losers)
+}
+
+let rec runRounds = (winners, losers) => {
+  let (newWinners, newLosers) = winners->runRound
+  newWinners->Array.length < 2
+    ? (newWinners, [...losers, newLosers])
+    : runRounds(newWinners, [...losers, newLosers])
+}
+
+let runTournament = () => {
+  let level = 4
+  let num = (2. ** level->Int.toFloat)->Float.toInt
+  let players = getPlayers(num)
+  let placement = getPlacement(level)
+
+  let round1 = placement->Array.map(p => players->Array.getUnsafe(p))
+
+  let (winners, losers) = runRounds(round1, [])
+
+  Console.log2(winners, losers)
+}
+
+runTournament()
 
 @react.component
 let make = () => {
